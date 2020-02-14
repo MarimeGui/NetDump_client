@@ -1,11 +1,11 @@
 use clap::Clap;
+use ez_io::{MagicNumberCheck, ReadE, WriteE};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
-use ez_io::{ReadE, WriteE, MagicNumberCheck};
-use std::net::TcpStream;
-use std::io::{Write, BufWriter};
 use std::fs::File;
+use std::io::{stdout, BufWriter, Write};
 use std::mem::transmute;
+use std::net::TcpStream;
 
 static PROTOCOL_VERSION: u32 = 1;
 static MAGIC_NUMBER: &str = "NETDUMP";
@@ -20,7 +20,12 @@ struct Opts {
     #[clap(short = "a", long = "address", value_name = "HOSTNAME")]
     host_address: String,
     /// Hostname of the Wii to connect to
-    #[clap(short = "p", long = "port", value_name = "PORT", default_value = "25565")]
+    #[clap(
+        short = "p",
+        long = "port",
+        value_name = "PORT",
+        default_value = "25565"
+    )]
     port: u16,
     /// Choose what to get from the disc
     #[clap(subcommand)]
@@ -46,14 +51,24 @@ enum Process {
 #[derive(Clap)]
 struct FullDump {
     /// Where the files will be written to
-    #[clap(short = "o", long = "output", value_name = "DIRECTORY", default_value = ".")]
+    #[clap(
+        short = "o",
+        long = "output",
+        value_name = "DIRECTORY",
+        default_value = "."
+    )]
     location: String,
 }
 
 #[derive(Clap)]
 struct GameDump {
     /// Where to write game dump
-    #[clap(short = "o", long = "output", value_name = "FILE", default_value = "./game.iso")]
+    #[clap(
+        short = "o",
+        long = "output",
+        value_name = "FILE",
+        default_value = "./game.iso"
+    )]
     filepath: String,
     /// Output to stdout rather than to a file. If this is set, 'output' option will be ignored
     #[clap(short = "s", long = "stdout")]
@@ -63,7 +78,12 @@ struct GameDump {
 #[derive(Clap)]
 struct BCADump {
     /// Where to write BCA dump
-    #[clap(short = "o", long = "output", value_name = "FILE", default_value = "./game.bca")]
+    #[clap(
+        short = "o",
+        long = "output",
+        value_name = "FILE",
+        default_value = "./game.bca"
+    )]
     filepath: String,
     /// Output to stdout rather than to a file. If this is set, 'output' option will be ignored
     #[clap(short = "s", long = "stdout")]
@@ -83,9 +103,9 @@ struct InfoRead {
 #[repr(u32)]
 enum Commands {
     /// Ask to disconnect nicely
-    Disconnect = 0xFFFFFFFF,
+    Disconnect = 0xFFFF_FFFF,
     /// Shutdown console, acts like we're disconnecting
-    Shutdown = 0xFFFFFFFE,
+    Shutdown = 0xFFFF_FFFE,
     /// Ejects the Disc
     EjectDisc = 1,
     /// Get info about the disc
@@ -99,8 +119,8 @@ enum Commands {
 #[derive(Copy, Clone, FromPrimitive)]
 #[repr(u32)]
 enum CommandAnswers {
-    ProtocolError = 0xFFFFFFFF,
-    NoDisc = 0xFFFFFFFE,
+    ProtocolError = 0xFFFF_FFFF,
+    NoDisc = 0xFFFF_FFFE,
     OK = 0,
     DiscInfo = 1,
     BCA = 2,
@@ -111,32 +131,38 @@ enum CommandAnswers {
 
 fn main() {
     let opts: Opts = Opts::parse();
-    
-    let mut stream = TcpStream::connect(format!("{}:{}", opts.host_address, opts.port)).expect("Failed to connect to the Wii"); // BufWriter maybe ?
+
+    let mut stream = TcpStream::connect(format!("{}:{}", opts.host_address, opts.port))
+        .expect("Failed to connect to the Wii"); // BufWriter maybe ?
     stream.write_all(&MAGIC_NUMBER.as_bytes()).unwrap(); // Magic Number
     stream.write_be_to_u32(PROTOCOL_VERSION).unwrap(); // Protocol Version
 
     match opts.process {
         Process::BCA(bca) => {
-            if bca.stdout {
-                unimplemented!();
+            stream.write_be_to_u32(Commands::DumpBCA as u32).unwrap(); // Command, 'as' is meh
+
+            let writer: Box<dyn Write> = if bca.stdout {
+                Box::new(stdout())
             } else {
-                stream.write_be_to_u32(Commands::DumpBCA as u32).unwrap(); // Command, 'as' is meh
+                Box::new(BufWriter::new(
+                    File::create(bca.filepath).expect("Failed to open file"),
+                ))
+            };
 
-                let file_writer = &mut BufWriter::new(File::create(bca.filepath).expect("Failed to open file"));
+            stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
+            stream
+                .check_magic_number(unsafe { &transmute::<u32, [u8; 4]>(PROTOCOL_VERSION.to_be()) })
+                .unwrap(); // Check Protocol Version, Meh transmute
 
-                stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
-                stream.check_magic_number(unsafe {&transmute::<u32, [u8; 4]>(PROTOCOL_VERSION.to_be())}).unwrap(); // Check Protocol Version, Meh transmute
-
-                match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
-                    Some(CommandAnswers::BCA) => unimplemented!(),
-                    Some(CommandAnswers::ProtocolError) => eprintln!("Unknown Protocol-related error, can't proceed"),
-                    Some(CommandAnswers::NoDisc) => eprintln!("No Disc in Drive, can't proceed"),
-                    _ => eprintln!("Weird response from Wii, disconnecting"),
+            match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
+                Some(CommandAnswers::BCA) => unimplemented!(),
+                Some(CommandAnswers::ProtocolError) => {
+                    eprintln!("Unknown Protocol-related error, can't proceed")
                 }
+                Some(CommandAnswers::NoDisc) => eprintln!("No Disc in Drive, can't proceed"),
+                _ => eprintln!("Weird response from Wii, disconnecting"),
             }
         }
         _ => unimplemented!(),
     }
-
 }
