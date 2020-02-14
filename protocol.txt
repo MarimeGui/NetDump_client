@@ -1,0 +1,62 @@
+// Version 1
+// command table
+Disconnect = 0xFFFFFFFF
+Shutdown console = 0xFFFFFFFE
+Eject Disc = 1
+Get Disc Info = 2
+Dump BCA = 3
+Dump Game = 4
+
+// command answer table
+Protocol error = 0xFFFFFFFF
+No Disc Error = 0xFFFFFFFE
+OK = 0
+Disc Info = 1
+BCA = 2 (if GC game, sends 0 bytes, should be handled as error on client side)
+Game = 3
+
+// disc type
+GC = 0
+Wii Single Sided = 1
+Wii Double Sided = 2
+
+-> From Client, to Wii
+char[7] magic_number "NETDUMP"
+u32 protocol_version = 1
+u32 command
+end
+(command packet always 17 bytes)
+
+<- To Client, from Wii
+char[7] magic_number "NETDUMP"
+u32 protocol_version = 1
+
+# If Protocol version mismatch
+u32 command_answer = Protocol error
+end
+
+# Disconnect / Shutting Down / Eject Disc
+u32 command_answer = OK
+end
+
+# Get Disc Info
+u32 command_answer = Disc Info
+u8 disc_type
+char[6] game_id
+u32 name_length
+char[name_length] internal_name
+end
+
+# Dump BCA
+u32 command_answer = Dump BCA
+u64 to_come (data left to send, not counting data present in the packet)
+u32 data_length
+u8[data_length] data_chunk
+end
+
+# Dump Game
+u32 command_answer = Dump Game
+u64 to_come (data left to send, not counting data present in the packet)
+u32 data_length
+u8[data_length] data_chunk
+end
