@@ -1,15 +1,17 @@
 // Version 1
 // command table
-Disconnect = 0xFFFFFFFF
-Shutdown console = 0xFFFFFFFE
+Disconnect = 0xFFFF_FFFF
+Exit Program = 0xFFFF_FFFE
+Shutdown console = 0xFFFF_FFFD
 Eject Disc = 1
 Get Disc Info = 2
 Dump BCA = 3
 Dump Game = 4
 
 // command answer table
-Protocol error = 0xFFFFFFFF
-No Disc Error = 0xFFFFFFFE
+Protocol error = 0xFFFF_FFFF
+No Disc Error = 0xFFFF_FFFE
+Couldn't Eject Error = 0xFFFF_FFFD
 OK = 0
 Disc Info = 1
 BCA = 2 (if GC game, sends 0 bytes, should be handled as error on client side)
