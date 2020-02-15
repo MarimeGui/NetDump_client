@@ -46,6 +46,9 @@ enum Process {
     /// Returns Disc type (GC, Wii Single-sided or Wii Double-sided), Game ID and Game Name
     #[clap(name = "info")]
     Info(InfoRead),
+    /// Eject the Disc from the Drive
+    #[clap(name = "eject")]
+    EjectDisc,
 }
 
 #[derive(Clap)]
@@ -160,6 +163,23 @@ fn main() {
                     eprintln!("Unknown Protocol-related error, can't proceed")
                 }
                 Some(CommandAnswers::NoDisc) => eprintln!("No Disc in Drive, can't proceed"),
+                _ => eprintln!("Weird response from Wii, disconnecting"),
+            }
+        }
+        Process::EjectDisc => {
+            stream.write_be_to_u32(Commands::EjectDisc as u32).unwrap(); // Command
+
+            stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
+            stream
+                .check_magic_number(unsafe { &transmute::<u32, [u8; 4]>(PROTOCOL_VERSION.to_be()) })
+                .unwrap(); // Check Protocol Version, Meh transmute
+
+            match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
+                Some(CommandAnswers::OK) => {}
+                Some(CommandAnswers::ProtocolError) => {
+                    eprintln!("Unknown Protocol-related error, can't proceed")
+                }
+                Some(CommandAnswers::NoDisc) => eprintln!("Drive is already empty"),
                 _ => eprintln!("Weird response from Wii, disconnecting"),
             }
         }
