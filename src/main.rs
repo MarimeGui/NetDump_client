@@ -52,6 +52,9 @@ enum Process {
     /// Exits the program on the Wii
     #[clap(name = "exit")]
     ExitProgram,
+    /// Shutdown the Wii
+    #[clap(name = "shutdown")]
+    Shutdown,
 }
 
 #[derive(Clap)]
@@ -152,6 +155,22 @@ fn main() {
     match opts.process {
         Process::ExitProgram => {
             packet.write_be_to_u32(Commands::ExitProgram as u32).unwrap(); // Command, 'as' is meh
+            stream.write_all(&packet).unwrap();
+
+            stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
+            stream
+                .check_magic_number(unsafe { &transmute::<u32, [u8; 4]>(PROTOCOL_VERSION.to_be()) })
+                .unwrap(); // Check Protocol Version, Meh transmute
+            
+            match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
+                Some(CommandAnswers::OK) => {}
+                _ => eprintln!("Weird response from Wii"),
+            }
+
+            to_disconnect = false;
+        }
+        Process::Shutdown => {
+            packet.write_be_to_u32(Commands::Shutdown as u32).unwrap(); // Command, 'as' is meh
             stream.write_all(&packet).unwrap();
 
             stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
