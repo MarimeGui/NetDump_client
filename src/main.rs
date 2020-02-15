@@ -136,13 +136,15 @@ fn main() {
     let opts: Opts = Opts::parse();
 
     let mut stream = TcpStream::connect(format!("{}:{}", opts.host_address, opts.port))
-        .expect("Failed to connect to the Wii"); // BufWriter maybe ?
-    stream.write_all(&MAGIC_NUMBER.as_bytes()).unwrap(); // Magic Number
-    stream.write_be_to_u32(PROTOCOL_VERSION).unwrap(); // Protocol Version
+        .expect("Failed to connect to the Wii");
+    let mut packet = Vec::with_capacity(15);
+    packet.write_all(&MAGIC_NUMBER.as_bytes()).unwrap(); // Magic Number
+    packet.write_be_to_u32(PROTOCOL_VERSION).unwrap(); // Protocol Version
 
     match opts.process {
         Process::BCA(bca) => {
-            stream.write_be_to_u32(Commands::DumpBCA as u32).unwrap(); // Command, 'as' is meh
+            packet.write_be_to_u32(Commands::DumpBCA as u32).unwrap(); // Command, 'as' is meh
+            stream.write_all(&packet).unwrap();
 
             let writer: Box<dyn Write> = if bca.stdout {
                 Box::new(stdout())
@@ -167,7 +169,8 @@ fn main() {
             }
         }
         Process::EjectDisc => {
-            stream.write_be_to_u32(Commands::EjectDisc as u32).unwrap(); // Command
+            packet.write_be_to_u32(Commands::EjectDisc as u32).unwrap(); // Command
+            stream.write_all(&packet).unwrap();
 
             stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
             stream

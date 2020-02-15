@@ -25,7 +25,7 @@ char[7] magic_number "NETDUMP"
 u32 protocol_version = 1
 u32 command
 end
-(command packet always 17 bytes)
+(command packet always 15 bytes)
 
 <- To Client, from Wii
 char[7] magic_number "NETDUMP"
