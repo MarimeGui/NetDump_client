@@ -24,7 +24,7 @@ struct Opts {
         short = "p",
         long = "port",
         value_name = "PORT",
-        default_value = "25565"
+        default_value = "9875"
     )]
     port: u16,
     /// Choose what to get from the disc
