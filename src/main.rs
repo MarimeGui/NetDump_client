@@ -223,56 +223,56 @@ fn main() {
                 }
             }
         }
-        // Process::BCA(bca) => {
-        //     packet.write_be_to_u32(Commands::DumpBCA as u32).unwrap(); // Command, 'as' is meh
-        //     stream.write_all(&packet).unwrap();
+        Process::Game(g) => {
+            packet.write_be_to_u32(Commands::DumpGame as u32).unwrap(); // Command, 'as' is meh
+            stream.write_all(&packet).unwrap();
 
-        //     let mut writer: Box<dyn Write> = if bca.stdout {
-        //         Box::new(stdout())
-        //     } else {
-        //         Box::new(BufWriter::new(
-        //             File::create(bca.filepath).expect("Failed to open file"),
-        //         ))
-        //     };
+            let mut writer: Box<dyn Write> = if g.stdout {
+                Box::new(stdout())
+            } else {
+                Box::new(BufWriter::new(
+                    File::create(g.filepath).expect("Failed to open file"),
+                ))
+            };
 
-        //     let mut bytes_left = true;
+            let mut bytes_left = true;
 
-        //     while bytes_left {
-        //         stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
-        //         stream
-        //             .check_magic_number(unsafe { &transmute::<u32, [u8; 4]>(PROTOCOL_VERSION.to_be()) })
-        //             .unwrap(); // Check Protocol Version, Meh transmute
+            while bytes_left {
+                stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
+                stream
+                    .check_magic_number(unsafe { &transmute::<u32, [u8; 4]>(PROTOCOL_VERSION.to_be()) })
+                    .unwrap(); // Check Protocol Version, Meh transmute
 
-        //         match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
-        //             Some(CommandAnswers::BCA) => {
-        //                 let to_come = stream.read_be_to_u64().unwrap();
-        //                 let data_length = stream.read_be_to_u32().unwrap();
-        //                 if to_come == u64::from(data_length) {
-        //                     bytes_left = false;
-        //                 }
-        //                 let mut data = vec![0u8; data_length as usize]; // Lossy
-        //                 stream.read_exact(&mut data).unwrap();
-        //                 writer.write_all(&data).unwrap();
-        //             },
-        //             Some(CommandAnswers::ProtocolError) => {
-        //                 eprintln!("Unknown Protocol-related error, can't proceed");
-        //                 break;
-        //             }
-        //             Some(CommandAnswers::NoDisc) => {
-        //                 eprintln!("No Disc in Drive, can't proceed");
-        //                 break;
-        //             }
-        //             Some(CommandAnswers::UnknownDiscType) => {
-        //                 eprintln!("Unknown Disc Type, can't dump");
-        //                 break
-        //             }
-        //             _ => {
-        //                 eprintln!("Weird response from Wii, disconnecting");
-        //                 break;
-        //             }
-        //         }
-        //     }
-        // }
+                match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
+                    Some(CommandAnswers::Game) => {
+                        let to_come = stream.read_be_to_u64().unwrap();
+                        let data_length = stream.read_be_to_u32().unwrap();
+                        if to_come == u64::from(data_length) {
+                            bytes_left = false;
+                        }
+                        let mut data = vec![0u8; data_length as usize]; // Lossy
+                        stream.read_exact(&mut data).unwrap();
+                        writer.write_all(&data).unwrap();
+                    },
+                    Some(CommandAnswers::ProtocolError) => {
+                        eprintln!("Unknown Protocol-related error, can't proceed");
+                        break;
+                    }
+                    Some(CommandAnswers::NoDisc) => {
+                        eprintln!("No Disc in Drive, can't proceed");
+                        break;
+                    }
+                    Some(CommandAnswers::UnknownDiscType) => {
+                        eprintln!("Unknown Disc Type, can't dump");
+                        break
+                    }
+                    _ => {
+                        eprintln!("Weird response from Wii, disconnecting");
+                        break;
+                    }
+                }
+            }
+        }
         Process::EjectDisc => {
             packet.write_be_to_u32(Commands::EjectDisc as u32).unwrap(); // Command
             stream.write_all(&packet).unwrap();
