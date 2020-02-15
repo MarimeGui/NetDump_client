@@ -49,6 +49,9 @@ enum Process {
     /// Eject the Disc from the Drive
     #[clap(name = "eject")]
     EjectDisc,
+    /// Exits the program on the Wii
+    #[clap(name = "exit")]
+    ExitProgram,
 }
 
 #[derive(Clap)]
@@ -107,8 +110,10 @@ struct InfoRead {
 enum Commands {
     /// Ask to disconnect nicely
     Disconnect = 0xFFFF_FFFF,
+    /// Exit program on the Wii
+    ExitProgram = 0xFFFF_FFFE,
     /// Shutdown console, acts like we're disconnecting
-    Shutdown = 0xFFFF_FFFE,
+    Shutdown = 0xFFFF_FFFD,
     /// Ejects the Disc
     EjectDisc = 1,
     /// Get info about the disc
@@ -124,6 +129,7 @@ enum Commands {
 enum CommandAnswers {
     ProtocolError = 0xFFFF_FFFF,
     NoDisc = 0xFFFF_FFFE,
+    CouldNotEject = 0xFFFF_FFFD,
     OK = 0,
     DiscInfo = 1,
     BCA = 2,
@@ -141,7 +147,25 @@ fn main() {
     packet.write_all(&MAGIC_NUMBER.as_bytes()).unwrap(); // Magic Number
     packet.write_be_to_u32(PROTOCOL_VERSION).unwrap(); // Protocol Version
 
+    let mut to_disconnect = true;
+
     match opts.process {
+        Process::ExitProgram => {
+            packet.write_be_to_u32(Commands::ExitProgram as u32).unwrap(); // Command, 'as' is meh
+            stream.write_all(&packet).unwrap();
+
+            stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
+            stream
+                .check_magic_number(unsafe { &transmute::<u32, [u8; 4]>(PROTOCOL_VERSION.to_be()) })
+                .unwrap(); // Check Protocol Version, Meh transmute
+            
+            match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
+                Some(CommandAnswers::OK) => {}
+                _ => eprintln!("Weird response from Wii"),
+            }
+
+            to_disconnect = false;
+        }
         Process::BCA(bca) => {
             packet.write_be_to_u32(Commands::DumpBCA as u32).unwrap(); // Command, 'as' is meh
             stream.write_all(&packet).unwrap();
@@ -179,13 +203,33 @@ fn main() {
 
             match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
                 Some(CommandAnswers::OK) => {}
+                Some(CommandAnswers::NoDisc) => println!("No Disc in drive"),
+                Some(CommandAnswers::CouldNotEject) => println!("Couldn't Eject Disc"),
                 Some(CommandAnswers::ProtocolError) => {
                     eprintln!("Unknown Protocol-related error, can't proceed")
                 }
-                Some(CommandAnswers::NoDisc) => eprintln!("Drive is already empty"),
-                _ => eprintln!("Weird response from Wii, disconnecting"),
+                _ => eprintln!("Weird response from Wii"),
             }
         }
         _ => unimplemented!(),
     }
+
+    if to_disconnect {
+        let mut packet = Vec::with_capacity(15);
+        packet.write_all(&MAGIC_NUMBER.as_bytes()).unwrap(); // Magic Number
+        packet.write_be_to_u32(PROTOCOL_VERSION).unwrap(); // Protocol Version
+        packet.write_be_to_u32(Commands::Disconnect as u32).unwrap(); // Command, 'as' is meh
+        stream.write_all(&packet).unwrap();
+
+        stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
+        stream
+            .check_magic_number(unsafe { &transmute::<u32, [u8; 4]>(PROTOCOL_VERSION.to_be()) })
+            .unwrap(); // Check Protocol Version, Meh transmute
+
+        match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
+            Some(CommandAnswers::OK) => {}
+            _ => eprintln!("Weird response from Wii, disconnecting anyways"),
+        }
+    }
+
 }
