@@ -12,6 +12,7 @@ Dump Game = 4
 Protocol error = 0xFFFF_FFFF
 No Disc Error = 0xFFFF_FFFE
 Couldn't Eject Error = 0xFFFF_FFFD
+Unknown Disc Type Error = 0xFFFF_FFFC
 OK = 0
 Disc Info = 1
 BCA = 2 (if GC game, sends 0 bytes, should be handled as error on client side)
@@ -51,14 +52,12 @@ end
 
 # Dump BCA
 u32 command_answer = Dump BCA
-u64 to_come (data left to send, not counting data present in the packet)
-u32 data_length
-u8[data_length] data_chunk
+u8[64] bca_data
 end
 
 # Dump Game
 u32 command_answer = Dump Game
-u64 to_come (data left to send, not counting data present in the packet)
+u64 to_come (data left to send, same as BCA)
 u32 data_length
 u8[data_length] data_chunk
 end

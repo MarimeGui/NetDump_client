@@ -60,7 +60,7 @@ dependencies = [
 [[package]]
 name = "ez_io"
 version = "0.1.0"
-source = "git+https://github.com/MarimeGui/ez_io#1d6a66ec434e3dd60cf68129ac247723d649ca37"
+source = "git+https://github.com/MarimeGui/ez_io#15a1676a787646a97674f98669c70759f040429a"
 
 [[package]]
 name = "heck"
