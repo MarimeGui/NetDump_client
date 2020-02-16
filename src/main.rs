@@ -142,6 +142,13 @@ enum CommandAnswers {
     Game = 3,
 }
 
+macro_rules! finish_and_send_packet {
+    ($packet:expr, $stream:expr, $command:ident) => {
+        $packet.write_be_to_u32(Commands::$command as u32).unwrap(); // Command, 'as' is meh
+        $stream.write_all(&$packet).unwrap();
+    };
+}
+
 macro_rules! check_magic_number_protocol_version {
     ($stream:expr) => {
         $stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
@@ -166,8 +173,7 @@ fn main() {
 
     match opts.process {
         Process::ExitProgram => {
-            packet.write_be_to_u32(Commands::ExitProgram as u32).unwrap(); // Command, 'as' is meh
-            stream.write_all(&packet).unwrap();
+            finish_and_send_packet!(packet, stream, ExitProgram);
 
             check_magic_number_protocol_version!(stream);
             
@@ -179,8 +185,7 @@ fn main() {
             to_disconnect = false;
         }
         Process::Shutdown => {
-            packet.write_be_to_u32(Commands::Shutdown as u32).unwrap(); // Command, 'as' is meh
-            stream.write_all(&packet).unwrap();
+            finish_and_send_packet!(packet, stream, Shutdown);
 
             check_magic_number_protocol_version!(stream);
             
@@ -192,8 +197,7 @@ fn main() {
             to_disconnect = false;
         }
         Process::Info(i) => {
-            packet.write_be_to_u32(Commands::GetDiscInfo as u32).unwrap(); // Command, 'as' is meh
-            stream.write_all(&packet).unwrap();
+            finish_and_send_packet!(packet, stream, GetDiscInfo);
 
             check_magic_number_protocol_version!(stream);
 
@@ -231,8 +235,9 @@ fn main() {
             }
         }
         Process::BCA(bca) => {
-            packet.write_be_to_u32(Commands::DumpBCA as u32).unwrap(); // Command, 'as' is meh
-            stream.write_all(&packet).unwrap();
+            finish_and_send_packet!(packet, stream, DumpBCA);
+
+            check_magic_number_protocol_version!(stream);
 
             let mut writer: Box<dyn Write> = if bca.stdout {
                 Box::new(stdout())
@@ -241,8 +246,6 @@ fn main() {
                     File::create(bca.filepath).expect("Failed to open file"),
                 ))
             };
-
-            check_magic_number_protocol_version!(stream);
 
             match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
                 Some(CommandAnswers::BCA) => {
@@ -265,8 +268,9 @@ fn main() {
             }
         }
         Process::Game(g) => {
-            packet.write_be_to_u32(Commands::DumpGame as u32).unwrap(); // Command, 'as' is meh
-            stream.write_all(&packet).unwrap();
+            finish_and_send_packet!(packet, stream, DumpGame);
+
+            check_magic_number_protocol_version!(stream);
 
             let mut writer: Box<dyn Write> = if g.stdout {
                 Box::new(stdout())
@@ -275,8 +279,6 @@ fn main() {
                     File::create(g.filepath).expect("Failed to open file"),
                 ))
             };
-
-            check_magic_number_protocol_version!(stream);
 
                 match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
                     Some(CommandAnswers::Game) => {
@@ -312,8 +314,7 @@ fn main() {
                 }
         }
         Process::EjectDisc => {
-            packet.write_be_to_u32(Commands::EjectDisc as u32).unwrap(); // Command
-            stream.write_all(&packet).unwrap();
+            finish_and_send_packet!(packet, stream, EjectDisc);
 
             check_magic_number_protocol_version!(stream);
 
@@ -334,13 +335,9 @@ fn main() {
         let mut packet = Vec::with_capacity(15);
         packet.write_all(&MAGIC_NUMBER.as_bytes()).unwrap(); // Magic Number
         packet.write_be_to_u32(PROTOCOL_VERSION).unwrap(); // Protocol Version
-        packet.write_be_to_u32(Commands::Disconnect as u32).unwrap(); // Command, 'as' is meh
-        stream.write_all(&packet).unwrap();
+        finish_and_send_packet!(packet, stream, Disconnect);
 
-        stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
-        stream
-            .check_magic_number(unsafe { &transmute::<u32, [u8; 4]>(PROTOCOL_VERSION.to_be()) })
-            .unwrap(); // Check Protocol Version, Meh transmute
+        check_magic_number_protocol_version!(stream);
 
         match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
             Some(CommandAnswers::OK) => {}
