@@ -253,16 +253,16 @@ fn main() {
 
             check_magic_number_protocol_version!(stream);
 
-            let mut writer: Box<dyn Write> = if bca.stdout {
-                Box::new(stdout())
-            } else {
-                Box::new(BufWriter::new(
-                    File::create(bca.filepath).expect("Failed to open file"),
-                ))
-            };
-
             match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
                 Some(CommandAnswers::BCA) => {
+                    let mut writer: Box<dyn Write> = if bca.stdout {
+                        Box::new(stdout())
+                    } else {
+                        Box::new(BufWriter::new(
+                            File::create(bca.filepath).expect("Failed to open file"),
+                        ))
+                    };
+
                     let mut data = vec![0u8; 64]; // Lossy
                     stream.read_exact(&mut data).unwrap();
                     writer.write_all(&data).unwrap();
@@ -288,16 +288,16 @@ fn main() {
 
             check_magic_number_protocol_version!(stream);
 
-            let mut writer: Box<dyn Write> = if g.stdout {
-                Box::new(stdout())
-            } else {
-                Box::new(BufWriter::new(
-                    File::create(g.filepath).expect("Failed to open file"),
-                ))
-            };
-
             match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
                 Some(CommandAnswers::Game) => {
+                    let mut writer: Box<dyn Write> = if g.stdout {
+                        Box::new(stdout())
+                    } else {
+                        Box::new(BufWriter::new(
+                            File::create(g.filepath).expect("Failed to open file"),
+                        ))
+                    };
+                    
                     let data_length = stream.read_be_to_u64().unwrap();
                     let mut data_received = 0u64;
                     let mut data = vec![0u8; IO_SIZE];
