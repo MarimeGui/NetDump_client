@@ -10,6 +10,8 @@ use std::net::TcpStream;
 static PROTOCOL_VERSION: u32 = 1;
 static MAGIC_NUMBER: &str = "NETDUMP";
 
+static IO_SIZE: usize = 32768;
+
 // ---------------------------- CLI Argument Parsing stuff ----------------------------
 
 /// Client for netdump running on a Wii
@@ -235,43 +237,43 @@ fn main() {
                 ))
             };
 
-            let mut bytes_left = true;
-
-            while bytes_left {
-                stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
+            stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
                 stream
                     .check_magic_number(unsafe { &transmute::<u32, [u8; 4]>(PROTOCOL_VERSION.to_be()) })
                     .unwrap(); // Check Protocol Version, Meh transmute
 
                 match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
                     Some(CommandAnswers::Game) => {
-                        let to_come = stream.read_be_to_u64().unwrap();
-                        let data_length = stream.read_be_to_u32().unwrap();
-                        if to_come == u64::from(data_length) {
-                            bytes_left = false;
+                        let data_length = stream.read_be_to_u64().unwrap();
+                        let mut data_received = 0u64;
+                        let mut data = vec![0u8; IO_SIZE];
+                        while data_received < data_length {
+                            if (data_length-data_received) < (IO_SIZE as u64) {
+                                // Last data parts might not be big enough to fit buffer
+                                let mut last_data = vec![0u8; (data_length-data_received) as usize]; // Lossy
+                                stream.read_exact(&mut data).unwrap();
+                                writer.write_all(&data).unwrap();
+                                data_received += data_length-data_received;
+                            } else {
+                                stream.read_exact(&mut data).unwrap();
+                                writer.write_all(&data).unwrap();
+                                data_received += IO_SIZE as u64; // Lossy
+                            }
                         }
-                        let mut data = vec![0u8; data_length as usize]; // Lossy
-                        stream.read_exact(&mut data).unwrap();
-                        writer.write_all(&data).unwrap();
                     },
                     Some(CommandAnswers::ProtocolError) => {
                         eprintln!("Unknown Protocol-related error, can't proceed");
-                        break;
                     }
                     Some(CommandAnswers::NoDisc) => {
                         eprintln!("No Disc in Drive, can't proceed");
-                        break;
                     }
                     Some(CommandAnswers::UnknownDiscType) => {
                         eprintln!("Unknown Disc Type, can't dump");
-                        break
                     }
                     _ => {
                         eprintln!("Weird response from Wii, disconnecting");
-                        break;
                     }
                 }
-            }
         }
         Process::EjectDisc => {
             packet.write_be_to_u32(Commands::EjectDisc as u32).unwrap(); // Command

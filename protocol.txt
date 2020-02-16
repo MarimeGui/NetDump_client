@@ -57,7 +57,6 @@ end
 
 # Dump Game
 u32 command_answer = Dump Game
-u64 to_come (data left to send, same as BCA)
-u32 data_length
+u64 data_length
 u8[data_length] data_chunk
 end
