@@ -11,3 +11,5 @@ clap = { git = "https://github.com/clap-rs/clap/" }
 ez_io = { git = "https://github.com/MarimeGui/ez_io" }
 num-derive = "0.3.0"
 num-traits = "0.2.11"
+serde = { version = "1.0.104", features = ["derive"]}
+serde_json = "1.0.48"

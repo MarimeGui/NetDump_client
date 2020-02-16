@@ -2,6 +2,9 @@ use clap::Clap;
 use ez_io::{MagicNumberCheck, ReadE, WriteE};
 use num_derive::FromPrimitive;
 use num_traits::FromPrimitive;
+use serde::Serialize;
+use serde_json::to_writer_pretty;
+use std::fmt::{Display, Formatter, Result as FMTResult};
 use std::fs::File;
 use std::io::{stdout, BufWriter, Read, Write};
 use std::mem::transmute;
@@ -142,6 +145,31 @@ enum CommandAnswers {
     Game = 3,
 }
 
+#[derive(Copy, Clone, FromPrimitive, Serialize)]
+#[repr(u8)]
+pub enum DiscTypes {
+    GC = 0,
+    WiiSingleSided = 1,
+    WiiDoubleSided = 2,
+}
+
+impl Display for DiscTypes {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FMTResult {
+        match &self {
+            DiscTypes::GC => write!(f, "GameCube"),
+            DiscTypes::WiiSingleSided => write!(f, "Wii Single-Sided"),
+            DiscTypes::WiiDoubleSided => write!(f, "Wii Double-Sided"),
+        }
+    }
+}
+
+#[derive(Serialize)]
+pub struct DiscInfo {
+    pub disc_type: DiscTypes,
+    pub game_name: String,
+    pub internal_name: String,
+}
+
 macro_rules! send_command {
     ($stream:expr, $command:ident) => {
         let mut packet = Vec::with_capacity(15);
@@ -215,22 +243,39 @@ fn main() {
 
             match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
                 Some(CommandAnswers::DiscInfo) => {
-                    match stream.read_to_u8().unwrap() {
-                        0 => println!("GC Game"),
-                        1 => println!("Wii Single-sided Game"),
-                        2 => println!("Wii Double-sided Game"),
-                        _ => eprintln!("Unknown value for Disc Type"),
-                    }
+                    let disc_type_u8 = stream.read_to_u8().unwrap();
 
                     let mut game_name_buf = vec![0u8; 32];
                     stream.read_exact(&mut game_name_buf).unwrap();
-                    let game_name = String::from_utf8(game_name_buf).unwrap();
-                    println!("Game Name: {}", game_name);
+                    let game_name = String::from_utf8(game_name_buf)
+                        .unwrap()
+                        .trim_end_matches(char::from(0))
+                        .to_string();
 
                     let mut internal_name_buf = vec![0u8; 512];
                     stream.read_exact(&mut internal_name_buf).unwrap();
-                    let internal_name = String::from_utf8(internal_name_buf).unwrap();
-                    println!("Internal Name: {}", internal_name);
+                    let internal_name = String::from_utf8(internal_name_buf)
+                        .unwrap()
+                        .trim_end_matches(char::from(0))
+                        .to_string();
+
+                    let disc = DiscInfo {
+                        disc_type: DiscTypes::from_u8(disc_type_u8).unwrap(),
+                        game_name,
+                        internal_name,
+                    };
+
+                    match i.filepath {
+                        None => {
+                            println!("Disc Type: {}", disc.disc_type);
+                            println!("Game Name: {}", disc.game_name);
+                            println!("Internal Name: {}", disc.internal_name);
+                        }
+                        Some(p) => {
+                            let file = &mut File::create(p).unwrap();
+                            to_writer_pretty(file, &disc).unwrap();
+                        }
+                    }
                 }
                 Some(CommandAnswers::ProtocolError) => {
                     eprintln!("Unknown Protocol-related error, can't proceed");
@@ -297,7 +342,7 @@ fn main() {
                             File::create(g.filepath).expect("Failed to open file"),
                         ))
                     };
-                    
+
                     let data_length = stream.read_be_to_u64().unwrap();
                     let mut data_received = 0u64;
                     let mut data = vec![0u8; IO_SIZE];
