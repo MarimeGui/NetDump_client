@@ -188,6 +188,48 @@ fn main() {
 
             to_disconnect = false;
         }
+        Process::Info(i) => {
+            packet.write_be_to_u32(Commands::GetDiscInfo as u32).unwrap(); // Command, 'as' is meh
+            stream.write_all(&packet).unwrap();
+
+            stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
+            stream
+                .check_magic_number(unsafe { &transmute::<u32, [u8; 4]>(PROTOCOL_VERSION.to_be()) })
+                .unwrap(); // Check Protocol Version, Meh transmute
+
+            match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
+                Some(CommandAnswers::DiscInfo) => {
+                    match stream.read_to_u8().unwrap() {
+                        0 => println!("GC Game"),
+                        1 => println!("Wii Single-sided Game"),
+                        2 => println!("Wii Double-sided Game"),
+                        _ => eprintln!("Unknown value for Disc Type"),
+                    }
+
+                    let mut game_name_buf = vec![0u8; 32];
+                    stream.read_exact(&mut game_name_buf).unwrap();
+                    let game_name = String::from_utf8(game_name_buf).unwrap();
+                    println!("Game Name: {}", game_name);
+                    
+                    let mut internal_name_buf = vec![0u8; 512];
+                    stream.read_exact(&mut internal_name_buf).unwrap();
+                    let internal_name = String::from_utf8(internal_name_buf).unwrap();
+                    println!("Internal Name: {}", internal_name);
+                },
+                Some(CommandAnswers::ProtocolError) => {
+                    eprintln!("Unknown Protocol-related error, can't proceed");
+                }
+                Some(CommandAnswers::NoDisc) => {
+                    eprintln!("No Disc in Drive, can't proceed");
+                }
+                Some(CommandAnswers::UnknownDiscType) => {
+                    eprintln!("Unknown Disc Type, can't proceed");
+                }
+                _ => {
+                    eprintln!("Weird response from Wii, disconnecting");
+                }
+            }
+        }
         Process::BCA(bca) => {
             packet.write_be_to_u32(Commands::DumpBCA as u32).unwrap(); // Command, 'as' is meh
             stream.write_all(&packet).unwrap();

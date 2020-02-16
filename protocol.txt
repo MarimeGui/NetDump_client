@@ -45,9 +45,8 @@ end
 # Get Disc Info
 u32 command_answer = Disc Info
 u8 disc_type
-char[6] game_id
-u32 name_length
-char[name_length] internal_name
+char[32] game_name
+char[512] internal_name
 end
 
 # Dump BCA
