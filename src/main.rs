@@ -251,8 +251,8 @@ fn main() {
                             if (data_length-data_received) < (IO_SIZE as u64) {
                                 // Last data parts might not be big enough to fit buffer
                                 let mut last_data = vec![0u8; (data_length-data_received) as usize]; // Lossy
-                                stream.read_exact(&mut data).unwrap();
-                                writer.write_all(&data).unwrap();
+                                stream.read_exact(&mut last_data).unwrap();
+                                writer.write_all(&last_data).unwrap();
                                 data_received += data_length-data_received;
                             } else {
                                 stream.read_exact(&mut data).unwrap();
