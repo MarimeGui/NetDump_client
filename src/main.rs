@@ -142,16 +142,21 @@ enum CommandAnswers {
     Game = 3,
 }
 
-macro_rules! finish_and_send_packet {
-    ($packet:expr, $stream:expr, $command:ident) => {
-        $packet.write_be_to_u32(Commands::$command as u32).unwrap(); // Command, 'as' is meh
-        $stream.write_all(&$packet).unwrap();
+macro_rules! send_command {
+    ($stream:expr, $command:ident) => {
+        let mut packet = Vec::with_capacity(15);
+        packet.write_all(&MAGIC_NUMBER.as_bytes()).unwrap(); // Magic Number
+        packet.write_be_to_u32(PROTOCOL_VERSION).unwrap(); // Protocol Version
+        packet.write_be_to_u32(Commands::$command as u32).unwrap(); // Command, 'as' is meh
+        $stream.write_all(&packet).unwrap();
     };
 }
 
 macro_rules! check_magic_number_protocol_version {
     ($stream:expr) => {
-        $stream.check_magic_number(&MAGIC_NUMBER.as_bytes()).unwrap(); // Check Magic Number
+        $stream
+            .check_magic_number(&MAGIC_NUMBER.as_bytes())
+            .unwrap(); // Check Magic Number
         $stream
             .check_magic_number(unsafe { &transmute::<u32, [u8; 4]>(PROTOCOL_VERSION.to_be()) })
             .unwrap(); // Check Protocol Version, Meh transmute
@@ -165,18 +170,15 @@ fn main() {
 
     let mut stream = TcpStream::connect(format!("{}:{}", opts.host_address, opts.port))
         .expect("Failed to connect to the Wii");
-    let mut packet = Vec::with_capacity(15);
-    packet.write_all(&MAGIC_NUMBER.as_bytes()).unwrap(); // Magic Number
-    packet.write_be_to_u32(PROTOCOL_VERSION).unwrap(); // Protocol Version
 
     let mut to_disconnect = true;
 
     match opts.process {
         Process::ExitProgram => {
-            finish_and_send_packet!(packet, stream, ExitProgram);
+            send_command!(stream, ExitProgram);
 
             check_magic_number_protocol_version!(stream);
-            
+
             match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
                 Some(CommandAnswers::OK) => {}
                 _ => eprintln!("Weird response from Wii"),
@@ -185,10 +187,10 @@ fn main() {
             to_disconnect = false;
         }
         Process::Shutdown => {
-            finish_and_send_packet!(packet, stream, Shutdown);
+            send_command!(stream, Shutdown);
 
             check_magic_number_protocol_version!(stream);
-            
+
             match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
                 Some(CommandAnswers::OK) => {}
                 _ => eprintln!("Weird response from Wii"),
@@ -196,8 +198,11 @@ fn main() {
 
             to_disconnect = false;
         }
+        Process::Full(o) => {
+            unimplemented!();
+        }
         Process::Info(i) => {
-            finish_and_send_packet!(packet, stream, GetDiscInfo);
+            send_command!(stream, GetDiscInfo);
 
             check_magic_number_protocol_version!(stream);
 
@@ -219,7 +224,7 @@ fn main() {
                     stream.read_exact(&mut internal_name_buf).unwrap();
                     let internal_name = String::from_utf8(internal_name_buf).unwrap();
                     println!("Internal Name: {}", internal_name);
-                },
+                }
                 Some(CommandAnswers::ProtocolError) => {
                     eprintln!("Unknown Protocol-related error, can't proceed");
                 }
@@ -235,7 +240,7 @@ fn main() {
             }
         }
         Process::BCA(bca) => {
-            finish_and_send_packet!(packet, stream, DumpBCA);
+            send_command!(stream, DumpBCA);
 
             check_magic_number_protocol_version!(stream);
 
@@ -252,7 +257,7 @@ fn main() {
                     let mut data = vec![0u8; 64]; // Lossy
                     stream.read_exact(&mut data).unwrap();
                     writer.write_all(&data).unwrap();
-                },
+                }
                 Some(CommandAnswers::ProtocolError) => {
                     eprintln!("Unknown Protocol-related error, can't proceed");
                 }
@@ -268,7 +273,7 @@ fn main() {
             }
         }
         Process::Game(g) => {
-            finish_and_send_packet!(packet, stream, DumpGame);
+            send_command!(stream, DumpGame);
 
             check_magic_number_protocol_version!(stream);
 
@@ -280,41 +285,41 @@ fn main() {
                 ))
             };
 
-                match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
-                    Some(CommandAnswers::Game) => {
-                        let data_length = stream.read_be_to_u64().unwrap();
-                        let mut data_received = 0u64;
-                        let mut data = vec![0u8; IO_SIZE];
-                        while data_received < data_length {
-                            if (data_length-data_received) < (IO_SIZE as u64) {
-                                // Last data parts might not be big enough to fit buffer
-                                let mut last_data = vec![0u8; (data_length-data_received) as usize]; // Lossy
-                                stream.read_exact(&mut last_data).unwrap();
-                                writer.write_all(&last_data).unwrap();
-                                data_received += data_length-data_received;
-                            } else {
-                                stream.read_exact(&mut data).unwrap();
-                                writer.write_all(&data).unwrap();
-                                data_received += IO_SIZE as u64; // Lossy
-                            }
+            match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
+                Some(CommandAnswers::Game) => {
+                    let data_length = stream.read_be_to_u64().unwrap();
+                    let mut data_received = 0u64;
+                    let mut data = vec![0u8; IO_SIZE];
+                    while data_received < data_length {
+                        if (data_length - data_received) < (IO_SIZE as u64) {
+                            // Last data parts might not be big enough to fit buffer
+                            let mut last_data = vec![0u8; (data_length - data_received) as usize]; // Lossy
+                            stream.read_exact(&mut last_data).unwrap();
+                            writer.write_all(&last_data).unwrap();
+                            data_received += data_length - data_received;
+                        } else {
+                            stream.read_exact(&mut data).unwrap();
+                            writer.write_all(&data).unwrap();
+                            data_received += IO_SIZE as u64; // Lossy
                         }
-                    },
-                    Some(CommandAnswers::ProtocolError) => {
-                        eprintln!("Unknown Protocol-related error, can't proceed");
-                    }
-                    Some(CommandAnswers::NoDisc) => {
-                        eprintln!("No Disc in Drive, can't proceed");
-                    }
-                    Some(CommandAnswers::UnknownDiscType) => {
-                        eprintln!("Unknown Disc Type, can't dump");
-                    }
-                    _ => {
-                        eprintln!("Weird response from Wii, disconnecting");
                     }
                 }
+                Some(CommandAnswers::ProtocolError) => {
+                    eprintln!("Unknown Protocol-related error, can't proceed");
+                }
+                Some(CommandAnswers::NoDisc) => {
+                    eprintln!("No Disc in Drive, can't proceed");
+                }
+                Some(CommandAnswers::UnknownDiscType) => {
+                    eprintln!("Unknown Disc Type, can't dump");
+                }
+                _ => {
+                    eprintln!("Weird response from Wii, disconnecting");
+                }
+            }
         }
         Process::EjectDisc => {
-            finish_and_send_packet!(packet, stream, EjectDisc);
+            send_command!(stream, EjectDisc);
 
             check_magic_number_protocol_version!(stream);
 
@@ -328,14 +333,10 @@ fn main() {
                 _ => eprintln!("Weird response from Wii"),
             }
         }
-        _ => unimplemented!(),
     }
 
     if to_disconnect {
-        let mut packet = Vec::with_capacity(15);
-        packet.write_all(&MAGIC_NUMBER.as_bytes()).unwrap(); // Magic Number
-        packet.write_be_to_u32(PROTOCOL_VERSION).unwrap(); // Protocol Version
-        finish_and_send_packet!(packet, stream, Disconnect);
+        send_command!(stream, Disconnect);
 
         check_magic_number_protocol_version!(stream);
 
@@ -344,5 +345,4 @@ fn main() {
             _ => eprintln!("Weird response from Wii, disconnecting anyways"),
         }
     }
-
 }
