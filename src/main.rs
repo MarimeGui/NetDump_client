@@ -152,6 +152,19 @@ macro_rules! send_command {
     };
 }
 
+macro_rules! send_disconnect {
+    ($stream:expr) => {
+        send_command!($stream, Disconnect);
+
+        check_magic_number_protocol_version!($stream);
+
+        match CommandAnswers::from_u32($stream.read_be_to_u32().unwrap()) {
+            Some(CommandAnswers::OK) => {}
+            _ => eprintln!("Weird response from Wii, disconnecting anyways"),
+        }
+    };
+}
+
 macro_rules! check_magic_number_protocol_version {
     ($stream:expr) => {
         $stream
@@ -171,8 +184,6 @@ fn main() {
     let mut stream = TcpStream::connect(format!("{}:{}", opts.host_address, opts.port))
         .expect("Failed to connect to the Wii");
 
-    let mut to_disconnect = true;
-
     match opts.process {
         Process::ExitProgram => {
             send_command!(stream, ExitProgram);
@@ -183,8 +194,6 @@ fn main() {
                 Some(CommandAnswers::OK) => {}
                 _ => eprintln!("Weird response from Wii"),
             }
-
-            to_disconnect = false;
         }
         Process::Shutdown => {
             send_command!(stream, Shutdown);
@@ -195,8 +204,6 @@ fn main() {
                 Some(CommandAnswers::OK) => {}
                 _ => eprintln!("Weird response from Wii"),
             }
-
-            to_disconnect = false;
         }
         Process::Full(o) => {
             unimplemented!();
@@ -238,6 +245,8 @@ fn main() {
                     eprintln!("Weird response from Wii, disconnecting");
                 }
             }
+
+            send_disconnect!(stream);
         }
         Process::BCA(bca) => {
             send_command!(stream, DumpBCA);
@@ -271,6 +280,8 @@ fn main() {
                     eprintln!("Weird response from Wii, disconnecting");
                 }
             }
+
+            send_disconnect!(stream);
         }
         Process::Game(g) => {
             send_command!(stream, DumpGame);
@@ -317,6 +328,8 @@ fn main() {
                     eprintln!("Weird response from Wii, disconnecting");
                 }
             }
+
+            send_disconnect!(stream);
         }
         Process::EjectDisc => {
             send_command!(stream, EjectDisc);
@@ -332,17 +345,8 @@ fn main() {
                 }
                 _ => eprintln!("Weird response from Wii"),
             }
-        }
-    }
 
-    if to_disconnect {
-        send_command!(stream, Disconnect);
-
-        check_magic_number_protocol_version!(stream);
-
-        match CommandAnswers::from_u32(stream.read_be_to_u32().unwrap()) {
-            Some(CommandAnswers::OK) => {}
-            _ => eprintln!("Weird response from Wii, disconnecting anyways"),
+            send_disconnect!(stream);
         }
     }
 }
